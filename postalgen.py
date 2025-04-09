@@ -2,8 +2,9 @@ import random
 import time
 import re
 import googlemaps
-import shelve
+import json
 
+landmarks = ["Grocery store", "School", "Hospital", "MRT station", "Restaurant", "Park", "Bus stop"]
 api_key = 'YOUR_API_KEY'
 gmaps = googlemaps.Client(key=api_key)
 
@@ -29,52 +30,64 @@ def reverse_geocoding(location):
     reversed_result = gmaps.reverse_geocode((location.get("lat"), location.get("lng")))
     return reversed_result
 
-def main(reversed_result, postalcode, location, i=1):
-    word = r"\bSingapore\b"
-    with shelve.open("database") as db:
-        last_key = max(map(int, db.keys()), default=0)  # Get last key or 0 if empty
-        i = last_key + 1
-        while True:
-            if reversed_result:
-                for place in reversed_result:
-                    formatted_address = place.get("formatted_address")
-                    if formatted_address != '9R29+RW Singapore':
-                        formatted_address = place.get("formatted_address")
-                        index = re.search(word, formatted_address).end()
-                        if postalcode == formatted_address[index+1:]:
-                            print("\n")
-                            print(f"Coordinates for {postalcode}: {location}")
-                            print(formatted_address)
-                            url = "https://www.google.com/maps/place/?q=place_id:"+ reversed_result[0].get("place_id")
-                            print(url)
-                            print("\n")
-                            print(place)
+def get_bus_stops(description):
+    with open("bus_stops.json", "r", encoding="utf-8") as f:
+        bus_stop_data = json.load(f)
+    bus_stops = [item for item in bus_stop_data if item["Description"] == description]
+    with open("bus_routes.json", "r", encoding="utf-8") as f:
+        bus_routes_data = json.load(f)
+    servicing_buses = [item for item in bus_routes_data if item["BusStopCode"] == bus_stops[0]["BusStopCode"]]
+    matching_services = [item["ServiceNo"] for item in servicing_buses]
+    print(f"The bus services for bus stop, {description} are {matching_services}")
 
-                            db[str(i)] = {
-                                "Postal Code": postalcode,
-                                "Location": location,
-                                "Address": formatted_address,
-                                "Location URL":  url,
-                                "Place": place
-                            }
-                            i += 1
-                            
-                            while True:
-                                continuation = input("\nPrint, exit or continue? ")
-                                if continuation == "exit":
-                                    exit()
-                                elif continuation == "print":
-                                    for key, value in db.items():
-                                        print(f"Key: {key}")
-                                        print("Value:", value)
-                                        print("\n")
-                                    continue
-                        time.sleep(0.3)
-                        new_postalcode = postalgen()
-                        new_location = geocoding(new_postalcode)
-                        new_reversed_result = reverse_geocoding(new_location)
-                        main(new_reversed_result, new_postalcode, new_location, i)
-                        
+
+
+
+def main(reversed_result, postalcode, origin_location, i=1):
+    word = r"\bSingapore\b"
+    if reversed_result:
+        for place in reversed_result:
+            formatted_address = place.get("formatted_address")
+            if formatted_address != '9R29+RW Singapore':
+                formatted_address = place.get("formatted_address")
+                index = re.search(word, formatted_address).end()
+                if postalcode == formatted_address[index+1:]:
+                    print("\n")
+                    print(f"Coordinates for {postalcode}: {origin_location}")
+                    print(formatted_address)
+                    print("https://www.google.com/maps/place/?q=place_id:"+ reversed_result[0].get("place_id"))
+                    print("\n")
+                    print(place)
+                    input("Press Enter to continue...")
+                    print("\n")
+                    count = 0
+                    while count < len(landmarks):
+                        if count <= 3:
+                            mode = "driving"
+                        else:
+                            mode = "walking"
+                        query = f"Nearest {landmarks[count]} to {formatted_address}"
+                        places = gmaps.places(query).get("results")[0]
+                        landmark_loc = gmaps.reverse_geocode((places.get("geometry").get("location").get("lat"), places.get("geometry").get("location").get("lng")))
+                        print(f"{landmarks[count]}: {places.get('name')}")
+                        print(landmark_loc[0].get("formatted_address"))
+                        print("https://www.google.com/maps/place/?q=place_id:"+ places.get("place_id"))
+                        distance_result = gmaps.distance_matrix(origins=[origin_location], destinations=[landmark_loc[0].get("formatted_address")], mode=mode)
+                        distance_info = distance_result['rows'][0]['elements'][0]
+                        print(f"Distance: {distance_info.get('distance', {}).get('text', 'N/A')}")
+                        print(f"Duration: {distance_info.get('duration', {}).get('text', 'N/A')}")
+                        count += 1
+                        input("Press Enter to continue...")
+                        print("\n")
+
+                    get_bus_stops(places.get('name'))
+
+                time.sleep(0.3)
+                new_postalcode = postalgen()
+                new_location = geocoding(new_postalcode)
+                new_reversed_result = reverse_geocoding(new_location)
+                main(new_reversed_result, new_postalcode, new_location, i)
+
 postalcode = postalgen()
 location = geocoding(postalcode)
 reversed_result = reverse_geocoding(location)
