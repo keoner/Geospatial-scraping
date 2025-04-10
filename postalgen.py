@@ -4,9 +4,16 @@ import re
 import googlemaps
 import json
 
-landmarks = ["Grocery store", "School", "Hospital", "MRT station", "Restaurant", "Park", "Bus stop"]
-api_key = 'YOUR_API_KEY'
+landmarks = ["Grocery store", "School", "Hospital", "MRT/LRT Station", "Restaurant", "Park", "Bus Stop"]
+filterList = ["Blk", "Bef", "Aft", "Before", "After", "Dr", "Opp", "Rd", "Near", "Beside", "Ave",
+            "Carpark", "Car Park", "Lor", "Condo", "Est", "Estate", "St", "Jct", "Cres"]
+api_key = "YOUR_API_KEY"  # Replace with your actual API key'
 gmaps = googlemaps.Client(key=api_key)
+
+with open("bus_routes.json", "r", encoding="utf-8") as f:
+    bus_routes_data = json.load(f)
+with open("bus_stops.json", "r", encoding="utf-8") as f:
+    bus_stop_data = json.load(f)
 
 def postalgen():
     districtcode = random.randint(1, 82)
@@ -31,17 +38,20 @@ def reverse_geocoding(location):
     return reversed_result
 
 def get_bus_stops(description):
-    with open("bus_stops.json", "r", encoding="utf-8") as f:
-        bus_stop_data = json.load(f)
     bus_stops = [item for item in bus_stop_data if item["Description"] == description]
-    with open("bus_routes.json", "r", encoding="utf-8") as f:
-        bus_routes_data = json.load(f)
     servicing_buses = [item for item in bus_routes_data if item["BusStopCode"] == bus_stops[0]["BusStopCode"]]
-    matching_services = [item["ServiceNo"] for item in servicing_buses]
-    print(f"The bus services for bus stop, {description} are {matching_services}")
+    buses = [item["ServiceNo"] for item in servicing_buses]
+    print(f"The bus services for bus stop, {description} are {buses}")
+    print("\n")
+    return buses
 
-
-
+def get_major_routes(buses):
+    for i in range(len(buses)):
+        bus_codes = [item["BusStopCode"] for item in bus_routes_data if item["ServiceNo"] == buses[i]]
+        bus_stop_names = [stop["Description"] for stop in bus_stop_data if stop["BusStopCode"] in bus_codes]
+        major_routes = [name for name in bus_stop_names if not any(filter.lower() in name.lower() for filter in filterList)]
+        print(f"Major routes for bus service {buses[i]} are at {major_routes}")
+        print("\n")
 
 def main(reversed_result, postalcode, origin_location, i=1):
     word = r"\bSingapore\b"
@@ -66,13 +76,15 @@ def main(reversed_result, postalcode, origin_location, i=1):
                             mode = "driving"
                         else:
                             mode = "walking"
-                        query = f"Nearest {landmarks[count]} to {formatted_address}"
-                        places = gmaps.places(query).get("results")[0]
-                        landmark_loc = gmaps.reverse_geocode((places.get("geometry").get("location").get("lat"), places.get("geometry").get("location").get("lng")))
+                        
+                        results = gmaps.places_nearby(location=origin_location, keyword=landmarks[count], rank_by="distance")
+                        places = results["results"][0]
+                        landmark_location = gmaps.reverse_geocode((places.get("geometry").get("location")))
+
                         print(f"{landmarks[count]}: {places.get('name')}")
-                        print(landmark_loc[0].get("formatted_address"))
+                        print(landmark_location[0].get("formatted_address"))
                         print("https://www.google.com/maps/place/?q=place_id:"+ places.get("place_id"))
-                        distance_result = gmaps.distance_matrix(origins=[origin_location], destinations=[landmark_loc[0].get("formatted_address")], mode=mode)
+                        distance_result = gmaps.distance_matrix(origins=[origin_location], destinations=[landmark_location[0].get("formatted_address")], mode=mode)
                         distance_info = distance_result['rows'][0]['elements'][0]
                         print(f"Distance: {distance_info.get('distance', {}).get('text', 'N/A')}")
                         print(f"Duration: {distance_info.get('duration', {}).get('text', 'N/A')}")
@@ -80,7 +92,11 @@ def main(reversed_result, postalcode, origin_location, i=1):
                         input("Press Enter to continue...")
                         print("\n")
 
-                    get_bus_stops(places.get('name'))
+                    stops = get_bus_stops(places.get('name'))
+                    get_major_routes(stops)
+                    
+                    if input("Enter to continue, 'exit' to leave") == "exit":
+                        exit()
 
                 time.sleep(0.3)
                 new_postalcode = postalgen()
