@@ -7,13 +7,30 @@ import json
 landmarks = ["Grocery store", "School", "Hospital", "MRT/LRT Station", "Restaurant", "Park", "Bus Stop"]
 filterList = ["Blk", "Bef", "Aft", "Before", "After", "Dr", "Opp", "Rd", "Near", "Beside", "Ave",
             "Carpark", "Car Park", "Lor", "Condo", "Est", "Estate", "St", "Jct", "Cres"]
-api_key = "AIzaSyD3kbEbVvFHBbS9iIQNaQuDDSViQxylyu4"  # Replace with your actual API key'
+api_key = "YOUR_API_KEY"  # Replace with your actual API key'
 gmaps = googlemaps.Client(key=api_key)
+
 
 with open("bus_routes.json", "r", encoding="utf-8") as f:
     bus_routes_data = json.load(f)
 with open("bus_stops.json", "r", encoding="utf-8") as f:
     bus_stop_data = json.load(f)
+
+with open("generated_data.json", "r", encoding="utf-8") as db:
+    # Getting data from database
+    # If the database is empty then start with empty list
+    try:
+        data = json.load(db)
+    except json.JSONDecodeError:
+        data = []
+    
+    # Getting key from database
+    # If the database is empty then start from 0
+    if len(data) < 1:
+        i = 0
+    else:
+        last_key = max(map(lambda x: x["id"], db), default=0)
+        i = last_key + 1
 
 def postalgen():
     districtcode = random.randint(1, 82)
@@ -41,8 +58,7 @@ def get_bus_stops(description):
     bus_stops = [item for item in bus_stop_data if item["Description"] == description]
     servicing_buses = [item for item in bus_routes_data if item["BusStopCode"] == bus_stops[0]["BusStopCode"]]
     buses = [item["ServiceNo"] for item in servicing_buses]
-    print(f"The bus services for bus stop, {description} are {buses}")
-    print("\n")
+    print(f"The bus services for bus stop, {description} are {buses}\n")
     return buses
 
 def get_major_routes(buses):
@@ -50,8 +66,7 @@ def get_major_routes(buses):
         bus_codes = [item["BusStopCode"] for item in bus_routes_data if item["ServiceNo"] == buses[i]]
         bus_stop_names = [stop["Description"] for stop in bus_stop_data if stop["BusStopCode"] in bus_codes]
         major_routes = [name for name in bus_stop_names if not any(filter.lower() in name.lower() for filter in filterList)]
-        print(f"Major routes for bus service {buses[i]} are at {major_routes}")
-        print("\n")
+        print(f"Major routes for bus service {buses[i]} are at {major_routes}\n")
 
 def main(reversed_result, postalcode, origin_location, i=1):
     word = r"\bSingapore\b"
@@ -62,15 +77,29 @@ def main(reversed_result, postalcode, origin_location, i=1):
                 formatted_address = place.get("formatted_address")
                 index = re.search(word, formatted_address).end()
                 if postalcode == formatted_address[index+1:]:
-                    print("\n")
-                    print(f"Coordinates for {postalcode}: {origin_location}")
-                    print(f"Name: {gmaps.place(place_id=reversed_result[0].get("place_id"))['result'].get("name")}")
+                    place_id = reversed_result[0].get("place_id")
+                    print(f"\nCoordinates for {postalcode}: {origin_location}")
+                    print(f"Name: {gmaps.place(place_id=place_id)['result'].get("name")}")
                     print(f"Human-Readable Address: {formatted_address}")
-                    print("https://www.google.com/maps/place/?q=place_id:"+ reversed_result[0].get("place_id"))
+                    print("https://www.google.com/maps/place/?q=place_id:"+ place_id)
                     print("\n")
                     print(place)
+                    
+                    with open("generated_data.json", "r", encoding="utf-8") as db:
+                        keys = [key for key in data if key["place_id"] == place_id]
+                        if keys:
+                            print("\nData already exists in the database.")
+                            print("Skipping this entry\n")
+                        else:
+                            with open("generated_data.json", "a", encoding="utf-8") as db:
+                                data.append({"id": i, "name": gmaps.place(place_id=place_id)['result'].get("name"),
+                                            "postalcode": postalcode, "coordinates": origin_location,
+                                            "formatted_address": formatted_address, "place_id": place_id})
+                                json.dump(data, db, ensure_ascii=False, indent=4)
+                                print("Data has been added to database.\n")
+
                     input("Press Enter to continue...")
-                    print("\n")
+                    
                     count = 0
                     while count < len(landmarks):
                         if count <= 3:
@@ -105,7 +134,7 @@ def main(reversed_result, postalcode, origin_location, i=1):
                 new_reversed_result = reverse_geocoding(new_location)
                 main(new_reversed_result, new_postalcode, new_location, i)
 
-postalcode = postalgen()
+postalcode = "575765"
 location = geocoding(postalcode)
 reversed_result = reverse_geocoding(location)
 main(reversed_result, postalcode, location)
