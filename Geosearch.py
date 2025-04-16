@@ -7,7 +7,7 @@ import json
 landmarks = ["Grocery store", "School", "Hospital", "MRT/LRT Station", "Restaurant", "Park", "Bus Stop"]
 filterList = ["Blk", "Bef", "Aft", "Before", "After", "Dr", "Opp", "Rd", "Near", "Beside", "Ave",
             "Carpark", "Car Park", "Lor", "Condo", "Est", "Estate", "St", "Jct", "Cres"]
-api_key = "YOUR_API_KEY"  # Replace with your actual API key'
+api_key = "AIzaSyD3kbEbVvFHBbS9iIQNaQuDDSViQxylyu4"  # Replace with your actual API key'
 gmaps = googlemaps.Client(key=api_key)
 
 with open("bus_routes.json", "r", encoding="utf-8") as f:
@@ -64,7 +64,8 @@ def main(reversed_result, postalcode, origin_location, i=1):
                 if postalcode == formatted_address[index+1:]:
                     print("\n")
                     print(f"Coordinates for {postalcode}: {origin_location}")
-                    print(formatted_address)
+                    print(f"Name: {gmaps.place(place_id=reversed_result[0].get("place_id"))['result'].get("name")}")
+                    print(f"Human-Readable Address: {formatted_address}")
                     print("https://www.google.com/maps/place/?q=place_id:"+ reversed_result[0].get("place_id"))
                     print("\n")
                     print(place)
